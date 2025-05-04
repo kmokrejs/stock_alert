@@ -36,7 +36,7 @@ def analyze_entry(rsi, srsi):
         return "Hold"
 
 def analyze_ticker(ticker):
-    start_date = '2024-10-01'
+    start_date = (pd.Timestamp.today() - pd.Timedelta(days=90)).strftime('%Y-%m-%d')
     end_date = pd.Timestamp.today().strftime('%Y-%m-%d')
     
     df = yf.download(ticker, start=start_date, end=end_date)[['Close']].copy()
@@ -87,11 +87,39 @@ if __name__ == "__main__":
 
         recipient = os.environ['EMAIL_RECIPIENT']
 
+        html_table = df.to_html(index=False, justify='center', border=1)
+
+        html_body = f"""
+        <html>
+        <head>
+            <style>
+                table {{
+                    border-collapse: collapse;
+                    width: 100%;
+                }}
+                th, td {{
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                    text-align: center;
+                }}
+                th {{
+                    background-color: #f2f2f2;
+                }}
+            </style>
+        </head>
+        <body>
+            <h2>📈 Daily Stock Analysis</h2>
+            {html_table}
+        </body>
+        </html>
+        """
+
         send_email(
-            subject="📈 Daily Stock Analysis Report",
-            body=f"Here is your daily stock analysis:\n\n{summary}",
-            recipient_email=recipient,
-            attachment_path=csv_path
+            subject="📊 Daily Stock Report",
+            body=html_body,
+            recipient_email=os.environ["EMAIL_RECIPIENT"],
+            attachment_path=csv_path,
+            is_html=True
         )
         print("✅ Email sent with CSV attachment.")
     else:
