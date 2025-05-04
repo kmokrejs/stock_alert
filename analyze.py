@@ -1,5 +1,5 @@
 from src.analysis import analyze_ticker
-from email_sender import send_email
+from src.email_sender import send_email
 import os
 import pandas as pd
 
