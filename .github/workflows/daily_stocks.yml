@@ -21,7 +21,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install yfinance pandas numpy python-dotenv
+          pip install yfinance pandas numpy python-dotenv datetime
 
       - name: Run stock analysis and send email
         env:

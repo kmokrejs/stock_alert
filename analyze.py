@@ -3,6 +3,7 @@ import pandas as pd
 from email_sender import send_email
 from dotenv import load_dotenv
 import numpy as np
+from datetime import datetime
 import os
 load_dotenv()
 
@@ -85,7 +86,9 @@ if __name__ == "__main__":
             for r in results
         ])
 
-        recipient = os.environ['EMAIL_RECIPIENT']
+        recipient = os.environ['EMAIL_RECIPIENT']   
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
 
         html_table = df.to_html(index=False, justify='center', border=1)
 
@@ -115,7 +118,7 @@ if __name__ == "__main__":
         """
 
         send_email(
-            subject="📊 Daily Stock Report",
+            subject = f"📊 Daily Stock Report — {timestamp}",
             body=html_body,
             recipient_email=os.environ["EMAIL_RECIPIENT"],
             attachment_path=csv_path,
