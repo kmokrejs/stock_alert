@@ -2,8 +2,8 @@ name: Daily Stock Alert
 
 on:
   schedule:
-    - cron: "30 13 * * 1-5" # Runs 8:30 AM UTC = 4:30 AM ET (before market)
-    - cron: "30 21 * * 1-5" # Runs 5:30 PM UTC = 1:30 PM ET (after close)
+    - cron: "0 6 * * 1-5"
+    - cron: "0 19 * * 1-5"
   workflow_dispatch:
 
 jobs:
