@@ -53,10 +53,16 @@ def analyze_ticker(ticker):
     latest = df.iloc[-1]
     recommendation = analyze_entry(latest['RSI'], latest['SRSI'])
 
+    try:
+        current_price = yf.Ticker(ticker).fast_info['last_price']
+    except Exception:
+        current_price = latest['Close']  
+
+
     return {
         'Ticker': ticker,
-        'Date': latest['Date'].date(),
-        'Price': latest['Close'],
+        'Date': datetime.now().strftime("%Y-%m-%d %H:%M"),
+        'Price': current_price,
         'RSI': latest['RSI'],
         'SRSI': latest['SRSI'],
         'Recommendation': recommendation
