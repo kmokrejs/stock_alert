@@ -73,7 +73,7 @@ def analyze_ticker(ticker):
 # === Run analysis on desired tickers ===
 
 if __name__ == "__main__":
-    tickers = ['MSFT', 'NVDA','AAPL', 'V', 'GOOGL', 'META', 'JNJ', 'F', 'EXPE', 'AMZN',  'AMD', 'DIS']
+    tickers = ['MSFT', 'NVDA','AAPL', 'V', 'GOOGL', 'META', 'JNJ', 'F', 'EXPE', 'AMZN',  'AMD', 'DIS', 'UNH']
     results = []
 
     for ticker in tickers:
