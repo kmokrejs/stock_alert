@@ -26,17 +26,61 @@ def compute_srsi(rsi, window=14):
     srsi = (rsi - min_rsi) / range_rsi.replace(0, pd.NA)
     return srsi * 100
 
-def analyze_entry(rsi, srsi):
+def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio):
+    # Base RSI/SRSI logic
     if rsi < 30 and srsi < 20:
-        return "🔥 Strong Buy"
+        base_signal = "🔥 Strong Buy"
     elif rsi < 35 and srsi < 30:
-        return "✅ Buy"
+        base_signal = "✅ Buy"
     elif 35 <= rsi <= 50 and srsi < 50:
-        return "🤔 Watch (Neutral)"
+        base_signal = "🤔 Watch (Neutral)"
     elif rsi > 70 or srsi > 80:
-        return "⚠️ Overbought — Consider Selling"
+        base_signal = "⚠️ Overbought — Consider Selling"
     else:
-        return "Hold"
+        base_signal = "Hold"
+
+    # Add-on adjustments:
+    notes = []
+
+    if price_vs_ma20 < -5 or price_vs_ma50 < -5:
+        notes.append("📉 Price below MA — possible undervaluation")
+    if price_vs_ma20 > 5 or price_vs_ma50 > 5:
+        notes.append("📈 Price above MA — watch for overbought")
+
+    if pe_ratio and pe_ratio < 15:
+        notes.append("💰 Low P/E — undervalued?")
+    elif pe_ratio and pe_ratio > 30:
+        notes.append("🧨 High P/E — priced for perfection")
+
+    # Combine
+    if notes:
+        return f"{base_signal} ({'; '.join(notes)})"
+    else:
+        return base_signal
+    
+def log_trade_opportunity(data, filename="trade_log.csv"):
+    log_cols = [
+        'Date', 'Ticker', 'Price', 'RSI', 'SRSI',
+        'MA20', 'MA50',
+        'Price_vs_MA20(%)', 'Price_vs_MA50(%)',
+        'PE_Ratio', 'Recommendation', 'Target1', 'Target2', 'StopLoss'
+    ]
+
+    entry = {
+        **data,
+        'Target1': round(data['MA20'], 2),
+        'Target2': round(data['MA50'], 2),
+        'StopLoss': round(data['Price'] * 0.975, 2)
+    }
+
+    df = pd.DataFrame([entry], columns=log_cols)
+
+    if os.path.exists(filename):
+        df.to_csv(filename, mode='a', index=False, header=False)
+    else:
+        df.to_csv(filename, mode='w', index=False, header=True)
+
+
 
 def analyze_ticker(ticker):
     start_date = (pd.Timestamp.today() - pd.Timedelta(days=90)).strftime('%Y-%m-%d')
@@ -50,16 +94,31 @@ def analyze_ticker(ticker):
 
     df['RSI'] = compute_rsi(df['Close'])
     df['SRSI'] = compute_srsi(df['RSI'])
-    df.dropna(subset=['RSI', 'SRSI'], inplace=True)
+    df['MA20'] = df['Close'].rolling(window=20).mean()
+    df['MA50'] = df['Close'].rolling(window=50).mean()
+    df.dropna(subset=['RSI', 'SRSI', 'MA20', 'MA50'], inplace=True)
 
     latest = df.iloc[-1]
-    recommendation = analyze_entry(latest['RSI'], latest['SRSI'])
+
+    # Fundamental data
+    try:
+        info = yf.Ticker(ticker).info
+        pe_ratio = info.get('trailingPE', None)
+    except Exception:
+        pe_ratio = None
 
     try:
         current_price = yf.Ticker(ticker).fast_info['last_price']
     except Exception:
         current_price = latest['Close']  
 
+    recommendation = analyze_entry(
+        latest['RSI'],
+        latest['SRSI'],
+        (current_price - latest['MA20']) / latest['MA20'] * 100,
+        (current_price - latest['MA50']) / latest['MA50'] * 100,
+        pe_ratio
+    )
 
     return {
         'Ticker': ticker,
@@ -67,20 +126,45 @@ def analyze_ticker(ticker):
         'Price': current_price,
         'RSI': latest['RSI'],
         'SRSI': latest['SRSI'],
+        'MA20': latest['MA20'],
+        'MA50': latest['MA50'],
+        'Price_vs_MA20(%)': (current_price - latest['MA20']) / latest['MA20'] * 100,
+        'Price_vs_MA50(%)': (current_price - latest['MA50']) / latest['MA50'] * 100,
+        'PE_Ratio': pe_ratio,
         'Recommendation': recommendation
     }
+
+
 
 # === Run analysis on desired tickers ===
 
 if __name__ == "__main__":
-    tickers = ['MSFT', 'NVDA','AAPL', 'V', 'GOOGL', 'META', 'JNJ', 'F', 'EXPE', 'AMZN',  'AMD', 'DIS', 'UNH']
+    tickers = [
+    'AAPL', 'MSFT', 'NVDA', 'AMD', 'GOOGL', 'META', 'TSLA',
+    'JPM', 'GS', 'BAC', 'JNJ', 'PFE', 'UNH', 'LLY',
+    'AMZN', 'DIS', 'HD', 'COST', 'NKE',
+    'CAT', 'DE', 'GE', 'XOM', 'CVX',
+    'DAL', 'UBER', 'EXPE', 'SPY', 'QQQ', 'XLK', 'XLF',
+    'CRM', 'SHOP', 'NET', 'ZS', 'SQ', 'DOCN', 'PLTR',
+    'COIN', 'SOFI', 'SCHW', 'PYPL',
+    'MRK', 'BMY', 'ABBV', 'TMO', 'IBB',
+    'TGT', 'WMT', 'ULTA', 'SBUX', 'MCD',
+    'ABNB', 'BKNG', 'MAR', 'LYFT',
+    'NOC', 'RTX', 'LMT', 'FCX',
+    'IWM', 'XLV', 'XLE', 'ARKK']
     results = []
+    buy_opportunities = []
+
 
     for ticker in tickers:
         try:
             result = analyze_ticker(ticker)
             if result:
                 results.append(result)
+
+            if result['Recommendation'].startswith("🔥") or result['Recommendation'].startswith("✅"):
+                buy_opportunities.append(result)
+                log_trade_opportunity(result)
         except Exception as e:
             print(f"❌ Error analyzing {ticker}: {e}")
 
@@ -94,11 +178,19 @@ if __name__ == "__main__":
             for r in results
         ])
 
-        recipient = os.environ['EMAIL_RECIPIENT']   
+        # recipient = os.environ['EMAIL_RECIPIENT']   
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
         html_table = df.to_html(index=False, justify='center', border=1)
+
+        if buy_opportunities:
+            buys_df = pd.DataFrame(buy_opportunities)
+            buys_html = buys_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1)
+            trades_section = f"<h3>💸 Trade Opportunities</h3>{buys_html}"
+        else:
+            trades_section = "<p>No trade opportunities today.</p>"
+
 
         html_body = f"""
         <html>
@@ -121,6 +213,8 @@ if __name__ == "__main__":
         <body>
             <h2>📈 Daily Stock Analysis</h2>
             {html_table}
+            <br>
+            {trades_section}    
         </body>
         </html>
         """
