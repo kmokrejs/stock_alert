@@ -58,7 +58,7 @@ def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio):
     else:
         return base_signal
     
-def log_trade_opportunity(data, filename="trade_log.csv"):
+def log_trade_opportunity(data):
     log_cols = [
         'Date', 'Ticker', 'Price', 'RSI', 'SRSI',
         'MA20', 'MA50',
@@ -72,14 +72,6 @@ def log_trade_opportunity(data, filename="trade_log.csv"):
         'Target2': round(data['MA50'], 2),
         'StopLoss': round(data['Price'] * 0.975, 2)
     }
-
-    df = pd.DataFrame([entry], columns=log_cols)
-
-    if os.path.exists(filename):
-        df.to_csv(filename, mode='a', index=False, header=False)
-    else:
-        df.to_csv(filename, mode='w', index=False, header=True)
-
 
 
 def analyze_ticker(ticker):
@@ -100,7 +92,6 @@ def analyze_ticker(ticker):
 
     latest = df.iloc[-1]
 
-    # Fundamental data
     try:
         info = yf.Ticker(ticker).info
         pe_ratio = info.get('trailingPE', None)
@@ -152,6 +143,7 @@ if __name__ == "__main__":
     'ABNB', 'BKNG', 'MAR', 'LYFT',
     'NOC', 'RTX', 'LMT', 'FCX',
     'IWM', 'XLV', 'XLE', 'ARKK']
+    watchlist = ['HD', 'MCD']
     results = []
     buy_opportunities = []
 
@@ -167,18 +159,23 @@ if __name__ == "__main__":
                 log_trade_opportunity(result)
         except Exception as e:
             print(f"❌ Error analyzing {ticker}: {e}")
+    
+    watchlist_results = [r for r in results if r['Ticker'] in watchlist]
+    if watchlist_results:
+        watchlist_df = pd.DataFrame(watchlist_results)
+        watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1)
+        watchlist_section = f"<h3>🔍 Watchlist</h3>{watchlist_html}"
+    else:
+        watchlist_section = "<p>No watchlist data available.</p>"
 
     if results:
         df = pd.DataFrame(results)
-        csv_path = "daily_stock_report.csv"
-        df.to_csv(csv_path, index=False)
 
         summary = "\n".join([
             f"{r['Ticker']}: {r['Recommendation']} | RSI: {r['RSI']:.2f}, SRSI: {r['SRSI']:.2f}"
             for r in results
         ])
 
-        # recipient = os.environ['EMAIL_RECIPIENT']   
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
@@ -212,6 +209,8 @@ if __name__ == "__main__":
         </head>
         <body>
             <h2>📈 Daily Stock Analysis</h2>
+            {watchlist_section}
+            <br>
             {html_table}
             <br>
             {trades_section}    
@@ -223,9 +222,8 @@ if __name__ == "__main__":
             subject = f"📊 Daily Stock Report — {timestamp}",
             body=html_body,
             recipient_email=os.environ["EMAIL_RECIPIENT"],
-            attachment_path=csv_path,
             is_html=True
         )
-        print("✅ Email sent with CSV attachment.")
+        print("✅ Email sent.")
     else:
         print("❌ No analysis results to send.")
