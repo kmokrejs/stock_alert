@@ -54,11 +54,11 @@ def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio):
 
     # Combine
     if notes:
-        return f"{base_signal} ({'; '.join(notes)})"
+        return f"{base_signal};\n" + ";\n".join(notes)
     else:
         return base_signal
     
-def log_trade_opportunity(data):
+def log_trade_opportunity(data, filename="trade_log.csv"):
     log_cols = [
         'Date', 'Ticker', 'Price', 'RSI', 'SRSI',
         'MA20', 'MA50',
@@ -72,6 +72,14 @@ def log_trade_opportunity(data):
         'Target2': round(data['MA50'], 2),
         'StopLoss': round(data['Price'] * 0.975, 2)
     }
+
+    df = pd.DataFrame([entry], columns=log_cols)
+
+    if os.path.exists(filename):
+        df.to_csv(filename, mode='a', index=False, header=False)
+    else:
+        df.to_csv(filename, mode='w', index=False, header=True)
+
 
 
 def analyze_ticker(ticker):
@@ -156,7 +164,7 @@ if __name__ == "__main__":
 
             if result['Recommendation'].startswith("🔥") or result['Recommendation'].startswith("✅"):
                 buy_opportunities.append(result)
-                log_trade_opportunity(result)
+                log_trade_opportunity(result) 
         except Exception as e:
             print(f"❌ Error analyzing {ticker}: {e}")
     
@@ -183,7 +191,7 @@ if __name__ == "__main__":
 
         if buy_opportunities:
             buys_df = pd.DataFrame(buy_opportunities)
-            buys_html = buys_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1)
+            buys_html = buys_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation', 'Target1', 'Target2', 'StopLoss']].to_html(index=False, justify='center', border=1)
             trades_section = f"<h3>💸 Trade Opportunities</h3>{buys_html}"
         else:
             trades_section = "<p>No trade opportunities today.</p>"
