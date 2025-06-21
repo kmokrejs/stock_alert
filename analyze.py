@@ -178,7 +178,7 @@ if __name__ == "__main__":
     watchlist_results = [r for r in results if r['Ticker'] in watchlist]
     if watchlist_results:
         watchlist_df = pd.DataFrame(watchlist_results)
-        watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1)
+        watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1, escape=False)
         watchlist_section = f"<h3>🔍 Watchlist</h3>{watchlist_html}"
     else:
         watchlist_section = "<p>No watchlist data available.</p>"
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
         if buy_opportunities:
             buys_df = pd.DataFrame(buy_opportunities)
-            buys_html = buys_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation', 'Target1', 'Target2', 'StopLoss']].to_html(index=False, justify='center', border=1)
+            buys_html = buys_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation', 'Target1', 'Target2', 'StopLoss']].to_html(index=False, justify='center', border=1, escape=False)
             trades_section = f"<h3>💸 Trade Opportunities</h3>{buys_html}"
         else:
             trades_section = "<p>No trade opportunities today.</p>"
