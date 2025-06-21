@@ -194,7 +194,7 @@ if __name__ == "__main__":
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
-        html_table = df.to_html(index=False, justify='center', border=1)
+        html_table = df.to_html(index=False, justify='center', border=1, escape=False)
 
         if buy_opportunities:
             buys_df = pd.DataFrame(buy_opportunities)
