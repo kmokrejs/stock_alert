@@ -26,7 +26,7 @@ def compute_srsi(rsi, window=14):
     srsi = (rsi - min_rsi) / range_rsi.replace(0, pd.NA)
     return srsi * 100
 
-def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio):
+def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio, html_format=False):
     # Base RSI/SRSI logic
     if rsi < 30 and srsi < 20:
         base_signal = "🔥 Strong Buy"
@@ -54,7 +54,8 @@ def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio):
 
     # Combine
     if notes:
-        return f"{base_signal};<br>" + ";<br>".join(notes)
+        separator = "<br>" if html_format else "\n"
+        return f"{base_signal}{separator}" + separator.join(notes)
     else:
         return base_signal
     
@@ -116,7 +117,8 @@ def analyze_ticker(ticker):
         latest['SRSI'],
         (current_price - latest['MA20']) / latest['MA20'] * 100,
         (current_price - latest['MA50']) / latest['MA50'] * 100,
-        pe_ratio
+        pe_ratio,
+        html_format=True
     )
 
     return {
