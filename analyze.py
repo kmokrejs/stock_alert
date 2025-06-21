@@ -163,8 +163,13 @@ if __name__ == "__main__":
                 results.append(result)
 
             if result['Recommendation'].startswith("🔥") or result['Recommendation'].startswith("✅"):
-                buy_opportunities.append(result)
-                log_trade_opportunity(result) 
+                trade_result = result.copy()
+                trade_result['Target1'] = round(result['MA20'], 2)
+                trade_result['Target2'] = round(result['MA50'], 2)
+                trade_result['StopLoss'] = round(result['Price'] * 0.975, 2)
+
+                buy_opportunities.append(trade_result) 
+                log_trade_opportunity(trade_result)    
         except Exception as e:
             print(f"❌ Error analyzing {ticker}: {e}")
     
