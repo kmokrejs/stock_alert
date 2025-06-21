@@ -54,7 +54,7 @@ def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio):
 
     # Combine
     if notes:
-        return f"{base_signal};\n" + ";\n".join(notes)
+        return f"{base_signal};<br>" + ";<br>".join(notes)
     else:
         return base_signal
     
