@@ -1,5 +1,4 @@
 import yfinance as yf
-import backtrader as bt
 import pandas as pd
 from email_sender import send_email
 from dotenv import load_dotenv
