@@ -5,6 +5,11 @@ from dotenv import load_dotenv
 import numpy as np
 from datetime import datetime
 import os
+import json
+
+RSI_STATE_FILE = "rsi_state.json"
+RSI_BUY_FILE = "rsi_buy_signals.json"
+
 load_dotenv()
 
 
@@ -170,16 +175,29 @@ if __name__ == "__main__":
         'IWM', 'XLV', 'XLE', 'ARKK',
         #'SQ'
     ]
-    watchlist = ['HD', 'MCD']
+    watchlist = ['MCD']
     results = []
     buy_opportunities = []
-    active_positions = {}
+
+    if os.path.exists(RSI_STATE_FILE):
+        with open(RSI_STATE_FILE, 'r') as f:
+            active_positions = json.load(f)
+    else:
+        active_positions = {}
+
+    if os.path.exists(RSI_BUY_FILE):
+        with open(RSI_BUY_FILE, 'r') as f:
+            rsi_at_buy = json.load(f)
+    else:
+        rsi_at_buy = {}
+    
+    active_positions = {k: float(v) for k, v in active_positions.items()}
+    rsi_at_buy = {k: float(v) for k, v in rsi_at_buy.items()}
+
+
 
     TAKE_PROFIT_PCT = 0.06
     STOP_LOSS_PCT = 0.20
-
-
-
 
     for ticker in tickers:
         try:
@@ -189,21 +207,33 @@ if __name__ == "__main__":
 
             if result['Recommendation'].startswith("🔥") or result['Recommendation'].startswith("✅"):
                 trade_result = result.copy()
-                trade_result['Target1'] = round(result['Price'] * (1 + TAKE_PROFIT_PCT), 2),
+                trade_result['Target1'] = round(result['Price'] * (1 + TAKE_PROFIT_PCT), 2)
                 trade_result['StopLoss'] = round(result['Price'] * (1 - STOP_LOSS_PCT), 2)
 
 
                 buy_opportunities.append(trade_result) 
                 log_trade_opportunity(trade_result)    
                 active_positions[ticker] = result['RSI']
+                if ticker not in rsi_at_buy:
+                    rsi_at_buy[ticker] = result['RSI']
+
 
         except Exception as e:
             print(f"❌ Error analyzing {ticker}: {e}")
+
+    with open(RSI_STATE_FILE, 'w') as f:
+        json.dump(active_positions, f, indent=2)
+
+    with open(RSI_BUY_FILE, 'w') as f:
+        json.dump(rsi_at_buy, f, indent=2)
     
     watchlist_results = [r for r in results if r['Ticker'] in watchlist]
     if watchlist_results:
         watchlist_df = pd.DataFrame(watchlist_results)
-        watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1, escape=False)
+        watchlist_df['RSI_at_Buy'] = watchlist_df['Ticker'].apply(lambda x: rsi_at_buy.get(x, np.nan))
+        watchlist_df['RSI_Jump'] = watchlist_df['RSI'] - watchlist_df['RSI_at_Buy']
+        watchlist_df['RSI_Jump'] = watchlist_df['RSI_Jump'].round(2)
+        watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'RSI_at_Buy', 'RSI_Jump', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1, escape=False)
         watchlist_section = f"<h3>🔍 Watchlist</h3>{watchlist_html}"
     else:
         watchlist_section = "<p>No watchlist data available.</p>"
@@ -218,18 +248,9 @@ if __name__ == "__main__":
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # Watchlist Table
-        if watchlist_results:
-            watchlist_df = pd.DataFrame(watchlist_results)
-            watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1, escape=False)
-            watchlist_section = f"<h3>🔍 Watchlist</h3>{watchlist_html}"
-        else:
-            watchlist_section = "<p>No watchlist data available.</p>"
-
-        # Trade Opportunities Table (Strong Buy or Buy from all tickers)
         if buy_opportunities:
             trades_df = pd.DataFrame(buy_opportunities)
-            trades_html = trades_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation', 'Target1', 'Target2', 'StopLoss']].to_html(index=False, justify='center', border=1, escape=False)
+            trades_html = trades_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation', 'Target1', 'StopLoss']].to_html(index=False, justify='center', border=1, escape=False)
             trades_section = f"<h3>💸 Trade Opportunities</h3>{trades_html}"
         else:
             trades_section = "<p>No trade opportunities today.</p>"
@@ -261,12 +282,13 @@ if __name__ == "__main__":
         </body>
         </html>
         """
-        send_email(
-            subject = f"📊 Daily Stock Report — {timestamp}",
-            body=html_body,
-            recipient_email=os.environ["EMAIL_RECIPIENT"],
-            is_html=True
-        )
+        print(html_body)
+        # send_email(
+        #     subject = f"📊 Daily Stock Report — {timestamp}",
+        #     body=html_body,
+        #     recipient_email=os.environ["EMAIL_RECIPIENT"],
+        #     is_html=True
+        # )
         print("✅ Email sent.")
     else:
         print("❌ No analysis results to send.")
