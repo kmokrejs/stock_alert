@@ -1,4 +1,5 @@
 import yfinance as yf
+import backtrader as bt
 import pandas as pd
 from email_sender import send_email
 from dotenv import load_dotenv
@@ -27,20 +28,17 @@ def compute_srsi(rsi, window=14):
     return srsi * 100
 
 def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio, html_format=False):
-    # Base RSI/SRSI logic
-    if rsi < 30 and srsi < 20:
+    notes = []
+    base_signal = "Hold"
+
+    if rsi < 30 and srsi < 30 and price_vs_ma20 < 0:
         base_signal = "🔥 Strong Buy"
-    elif rsi < 35 and srsi < 30:
+    elif rsi < 35 and srsi < 40 and price_vs_ma20 < 0:
         base_signal = "✅ Buy"
-    elif 35 <= rsi <= 50 and srsi < 50:
-        base_signal = "🤔 Watch (Neutral)"
     elif rsi > 70 or srsi > 80:
         base_signal = "⚠️ Overbought — Consider Selling"
-    else:
-        base_signal = "Hold"
-
-    # Add-on adjustments:
-    notes = []
+    elif 35 <= rsi <= 50:
+        base_signal = "🤔 Watch (Neutral)"
 
     if price_vs_ma20 < -5 or price_vs_ma50 < -5:
         notes.append("📉 Price below MA — possible undervaluation")
@@ -58,6 +56,17 @@ def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio, html_format
         return f"{base_signal}{separator}" + separator.join(notes)
     else:
         return base_signal
+    
+def analyze_exit(rsi, price_vs_ma20, price_vs_ma50, previous_rsi=None):
+    if previous_rsi is not None and (rsi - previous_rsi) > 15:
+        return "🔻 Sell — RSI Jump > 15"
+    if rsi > 70:
+        return "🔻 Sell — RSI Overbought"
+    if price_vs_ma20 > 5:
+        return "🔻 Sell — Price above MA20"
+    if price_vs_ma50 > 5:
+        return "🔻 Sell — Price above MA50"
+    return None
     
 def log_trade_opportunity(data, filename="trade_log.csv"):
     log_cols = [
@@ -121,6 +130,15 @@ def analyze_ticker(ticker):
         html_format=True
     )
 
+    previous_rsi = active_positions.get(ticker, None)
+
+    exit_signal = analyze_exit(
+        latest['RSI'],
+        (current_price - latest['MA20']) / latest['MA20'] * 100,
+        (current_price - latest['MA50']) / latest['MA50'] * 100,
+        previous_rsi
+    )
+
     return {
         'Ticker': ticker,
         'Date': datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -132,7 +150,9 @@ def analyze_ticker(ticker):
         'Price_vs_MA20(%)': (current_price - latest['MA20']) / latest['MA20'] * 100,
         'Price_vs_MA50(%)': (current_price - latest['MA50']) / latest['MA50'] * 100,
         'PE_Ratio': pe_ratio,
-        'Recommendation': recommendation
+        'Recommendation': recommendation,
+        'Sell_Signal': exit_signal
+
     }
 
 
@@ -141,21 +161,25 @@ def analyze_ticker(ticker):
 
 if __name__ == "__main__":
     tickers = [
-    'AAPL', 'MSFT', 'NVDA', 'AMD', 'GOOGL', 'META', 'TSLA',
-    'JPM', 'GS', 'BAC', 'JNJ', 'PFE', 'UNH', 'LLY',
-    'AMZN', 'DIS', 'HD', 'COST', 'NKE',
-    'CAT', 'DE', 'GE', 'XOM', 'CVX',
-    'DAL', 'UBER', 'EXPE', 'SPY', 'QQQ', 'XLK', 'XLF',
-    'CRM', 'SHOP', 'NET', 'ZS', 'SQ', 'DOCN', 'PLTR',
-    'COIN', 'SOFI', 'SCHW', 'PYPL',
-    'MRK', 'BMY', 'ABBV', 'TMO', 'IBB',
-    'TGT', 'WMT', 'ULTA', 'SBUX', 'MCD',
-    'ABNB', 'BKNG', 'MAR', 'LYFT',
-    'NOC', 'RTX', 'LMT', 'FCX',
-    'IWM', 'XLV', 'XLE', 'ARKK']
+        'AAPL', 'MSFT', 'NVDA', 'AMD', 'GOOGL', 'META',
+        'JPM', 'GS', 'BAC', 'JNJ', 'PFE', 'UNH', 'LLY',
+        'AMZN', 'DIS', 'HD', 'COST', 'DE', 'GE', 'XOM', 'CVX',
+        'DAL', 'EXPE', 'SPY', 'QQQ', 'XLK', 'XLF', 'SHOP', 'NET', 'ZS', 'SCHW', 'PYPL',
+        'MRK', 'BMY', 'ABBV', 'TMO', 'IBB',
+        'TGT', 'WMT', 'ULTA', 'MCD',
+        'NOC', 'RTX', 'LMT', 'FCX',
+        'IWM', 'XLV', 'XLE', 'ARKK',
+        #'SQ'
+    ]
     watchlist = ['HD', 'MCD']
     results = []
     buy_opportunities = []
+    active_positions = {}
+
+    TAKE_PROFIT_PCT = 0.06
+    STOP_LOSS_PCT = 0.20
+
+
 
 
     for ticker in tickers:
@@ -166,12 +190,14 @@ if __name__ == "__main__":
 
             if result['Recommendation'].startswith("🔥") or result['Recommendation'].startswith("✅"):
                 trade_result = result.copy()
-                trade_result['Target1'] = round(result['MA20'], 2)
-                trade_result['Target2'] = round(result['MA50'], 2)
-                trade_result['StopLoss'] = round(result['Price'] * 0.975, 2)
+                trade_result['Target1'] = round(result['Price'] * (1 + TAKE_PROFIT_PCT), 2),
+                trade_result['StopLoss'] = round(result['Price'] * (1 - STOP_LOSS_PCT), 2)
+
 
                 buy_opportunities.append(trade_result) 
                 log_trade_opportunity(trade_result)    
+                active_positions[ticker] = result['RSI']
+
         except Exception as e:
             print(f"❌ Error analyzing {ticker}: {e}")
     
@@ -193,13 +219,19 @@ if __name__ == "__main__":
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+        # Watchlist Table
+        if watchlist_results:
+            watchlist_df = pd.DataFrame(watchlist_results)
+            watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1, escape=False)
+            watchlist_section = f"<h3>🔍 Watchlist</h3>{watchlist_html}"
+        else:
+            watchlist_section = "<p>No watchlist data available.</p>"
 
-        html_table = df.to_html(index=False, justify='center', border=1, escape=False)
-
+        # Trade Opportunities Table (Strong Buy or Buy from all tickers)
         if buy_opportunities:
-            buys_df = pd.DataFrame(buy_opportunities)
-            buys_html = buys_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation', 'Target1', 'Target2', 'StopLoss']].to_html(index=False, justify='center', border=1, escape=False)
-            trades_section = f"<h3>💸 Trade Opportunities</h3>{buys_html}"
+            trades_df = pd.DataFrame(buy_opportunities)
+            trades_html = trades_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation', 'Target1', 'Target2', 'StopLoss']].to_html(index=False, justify='center', border=1, escape=False)
+            trades_section = f"<h3>💸 Trade Opportunities</h3>{trades_html}"
         else:
             trades_section = "<p>No trade opportunities today.</p>"
 
@@ -223,16 +255,13 @@ if __name__ == "__main__":
             </style>
         </head>
         <body>
-            <h2>📈 Daily Stock Analysis</h2>
+            <h2>📈 Daily Stock Analysis — {timestamp}</h2>
             {watchlist_section}
             <br>
-            {html_table}
-            <br>
-            {trades_section}    
+            {trades_section}
         </body>
         </html>
         """
-
         send_email(
             subject = f"📊 Daily Stock Report — {timestamp}",
             body=html_body,
