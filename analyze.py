@@ -282,13 +282,12 @@ if __name__ == "__main__":
         </body>
         </html>
         """
-        print(html_body)
-        # send_email(
-        #     subject = f"📊 Daily Stock Report — {timestamp}",
-        #     body=html_body,
-        #     recipient_email=os.environ["EMAIL_RECIPIENT"],
-        #     is_html=True
-        # )
+        send_email(
+            subject = f"📊 Daily Stock Report — {timestamp}",
+            body=html_body,
+            recipient_email=os.environ["EMAIL_RECIPIENT"],
+            is_html=True
+        )
         print("✅ Email sent.")
     else:
         print("❌ No analysis results to send.")
