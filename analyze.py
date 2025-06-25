@@ -62,13 +62,13 @@ def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio, html_format
         return base_signal
     
 def analyze_exit(rsi, price_vs_ma20, price_vs_ma50, previous_rsi=None):
-    if previous_rsi is not None and (rsi - previous_rsi) > 15:
-        return "🔻 Sell — RSI Jump > 15"
+    if previous_rsi is not None and (rsi - previous_rsi) > 42:
+        return "🔻 Sell — RSI Jump > 42"
     if rsi > 70:
         return "🔻 Sell — RSI Overbought"
-    if price_vs_ma20 > 5:
+    if price_vs_ma20 > 12:
         return "🔻 Sell — Price above MA20"
-    if price_vs_ma50 > 5:
+    if price_vs_ma50 > 10:
         return "🔻 Sell — Price above MA50"
     return None
     
@@ -233,7 +233,7 @@ if __name__ == "__main__":
         watchlist_df['RSI_at_Buy'] = watchlist_df['Ticker'].apply(lambda x: rsi_at_buy.get(x, np.nan))
         watchlist_df['RSI_Jump'] = watchlist_df['RSI'] - watchlist_df['RSI_at_Buy']
         watchlist_df['RSI_Jump'] = watchlist_df['RSI_Jump'].round(2)
-        watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'RSI_at_Buy', 'RSI_Jump', 'SRSI', 'PE_Ratio', 'Recommendation']].to_html(index=False, justify='center', border=1, escape=False)
+        watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'RSI_at_Buy', 'RSI_Jump', 'SRSI', 'PE_Ratio', 'Recommendation', 'Sell_Signal']].to_html(index=False, justify='center', border=1, escape=False)
         watchlist_section = f"<h3>🔍 Watchlist</h3>{watchlist_html}"
     else:
         watchlist_section = "<p>No watchlist data available.</p>"
