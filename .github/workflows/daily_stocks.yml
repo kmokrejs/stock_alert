@@ -2,8 +2,8 @@ name: Daily Stock Alert
 
 on:
   schedule:
-    - cron: "30 12 * * 1-5"
-    - cron: "20 22 * * 1-5"
+    - cron: "30 10 * * 1-5" # 12:30 Prague
+    - cron: "20 20 * * 1-5" # 22:20 Prague
   workflow_dispatch:
 
 jobs:

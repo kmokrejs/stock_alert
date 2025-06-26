@@ -6,17 +6,11 @@ import os
 data_dir = "cached_data"
 os.makedirs(data_dir, exist_ok=True)
 
-class FractionalDollarSizer(bt.Sizer):
-    params = (('amount', 1000),)
+class FixedQtySizer(bt.Sizer):
+    params = (('qty', 1),)
 
     def _getsizing(self, comminfo, cash, data, isbuy):
-        if isbuy:
-            price = data.close[0]
-            size = self.p.amount / price  # Float division (fractional shares)
-            return size  # ⚠️ Returns a float
-        else:
-            return self.broker.getposition(data).size
-
+        return self.p.qty
 
 
 class StochasticRSI(bt.Indicator):
@@ -129,7 +123,7 @@ class RSISRSIStrategy(bt.Strategy):
                     'Sell Price': sell_price,
                     'PnL': pnl,
                     'PnL_%': pnl / self.buy_price,
-                    'Dollar_PnL': (pnl / self.buy_price) * 100,
+                    'Dollar_PnL': pnl ,
                     'Stopped Out': stop_loss_triggered,
                     'Profit Taken': take_profit_triggered,
                     'Exit Reason': exit_reason
@@ -208,7 +202,7 @@ if __name__ == '__main__':
         cerebro = bt.Cerebro()
         cerebro.addstrategy(RSISRSIStrategy)
         cerebro.adddata(data)
-        cerebro.addsizer(FractionalDollarSizer, amount=100)
+        cerebro.addsizer(FixedQtySizer, qty=1)
         cerebro.broker.set_coc(True)
         cerebro.broker.set_cash(10000)
         
