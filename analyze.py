@@ -196,7 +196,7 @@ if __name__ == "__main__":
 
 
 
-    TAKE_PROFIT_PCT = 0.06
+    TAKE_PROFIT_PCT = 0.20
     STOP_LOSS_PCT = 0.20
 
     for ticker in tickers:
