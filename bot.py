@@ -23,6 +23,8 @@ from alpaca.trading.enums import (
     QueryOrderStatus,
     TimeInForce,
 )
+from alpaca.trading.requests import GetOrdersRequest
+
 
 DOLLARS_PER_TRADE = 100
 
@@ -38,7 +40,7 @@ POSITIONS_CSV = "positions.csv"
 
 def load_positions():
     if os.path.exists(POSITIONS_CSV):
-        return pd.read_csv(POSITIONS_CSV, parse_dates=['date'])
+        return pd.read_csv(POSITIONS_CSV, parse_dates=['date'], dayfirst=True)
     else:
         return pd.DataFrame(columns=[
             'ticker', 'date', 'close', 'entry_rsi', 'srsi', 'ma20', 'status', 'sell_price', 'gain_loss'
@@ -202,11 +204,10 @@ def sync_positions_with_alpaca():
     if open_positions.empty:
         print("✅ No open positions to sync.")
         return
+    
+    order_filter = GetOrdersRequest(status=QueryOrderStatus.ALL)
+    all_orders = trading_client.get_orders(order_filter)
 
-    all_orders = trading_client.get_orders(
-        status=QueryOrderStatus.ALL,
-        nested=True
-    )
 
     updated = False
 
@@ -246,10 +247,8 @@ def sync_positions_with_alpaca():
 
 
 def cancel_open_orders_for_symbol(ticker):
-    open_orders = trading_client.get_orders(
-        status=QueryOrderStatus.OPEN,
-        symbols=[ticker]
-    )
+    open_filter = GetOrdersRequest(status=QueryOrderStatus.OPEN, symbols=[ticker])
+    open_orders = trading_client.get_orders(open_filter)
 
     for order in open_orders:
         try:
