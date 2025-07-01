@@ -159,6 +159,14 @@ def analyze_ticker(ticker):
 
     }
 
+def get_open_tickers(filename="positions.csv"):
+    if not os.path.exists(filename):
+        return []
+
+    df = pd.read_csv(filename)
+    open_tickers = df[df["status"] == "open"]["ticker"].unique().tolist()
+    return open_tickers
+
 
 
 # === Run analysis on desired tickers ===
@@ -175,7 +183,7 @@ if __name__ == "__main__":
         'IWM', 'XLV', 'XLE', 'ARKK',
         #'SQ'
     ]
-    watchlist = ['MCD']
+    watchlist = get_open_tickers()
     results = []
     buy_opportunities = []
 
