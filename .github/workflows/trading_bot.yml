@@ -1,8 +1,8 @@
-name: Daily Stock Alert
+name: Daily Tradinng Bot
 
 on:
   schedule:
-    - cron: "0 13 * * 1-5" # 15:00 Prague (30 min before US market opens)
+    - cron: "31 13 * * 1-5" # 15:31 Prague (1 min after US market opens)
   workflow_dispatch:
 
 jobs:
@@ -21,10 +21,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run stock analysis and send email
+      - name: Run stock trading bot
         env:
+          API_KEY_PAPER: ${{ secrets.API_KEY_PAPER }}
+          BASE_URL_PAPER: ${{ secrets.BASE_URL_PAPER }}
+          SECRET_KEY_PAPER: ${{ secrets.SECRET_KEY_PAPER }}
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
         run: |
-          python analyze.py
+          python bot.py

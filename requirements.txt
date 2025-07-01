@@ -1,3 +1,7 @@
 yfinance
 pandas
 numpy
+ta
+alpaca-py
+python-dotenv
+datetime
