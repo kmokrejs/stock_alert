@@ -31,7 +31,7 @@ SECRET_KEY = os.environ["SECRET_KEY_PAPER"]
 BASE_URL = os.environ["BASE_URL_PAPER"]
 
 client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
-trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True, base_url=BASE_URL)  # Use paper trading
+trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)  # Use paper trading
 
 
 POSITIONS_CSV = "positions.csv"
