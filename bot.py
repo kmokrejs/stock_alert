@@ -259,6 +259,10 @@ def cancel_open_orders_for_symbol(ticker):
 
 
 def send_trade_summary_email():
+    if not buy_signals and not watchlist:
+        print("📭 No trade summary to email.")
+        return
+    
     if buy_signals or watchlist:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         subject = f"📈 Trading Summary — {timestamp}"
