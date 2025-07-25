@@ -87,15 +87,15 @@ def place_bracket_order(ticker, entry_price):
         trading_client.submit_order(limit_tp_sell)
         print(f"📈 Take Profit order placed at ${tp}")
 
-        limit_sl_sell = StopOrderRequest(
-            symbol=ticker,
-            qty=filled_qty,
-            stop_price=sl,
-            side=OrderSide.SELL,
-            time_in_force=TimeInForce.DAY
-        )
-        trading_client.submit_order(limit_sl_sell)
-        print(f"🛑 Stop Loss order placed at ${sl}")
+        # limit_sl_sell = StopOrderRequest(
+        #     symbol=ticker,
+        #     qty=filled_qty,
+        #     stop_price=sl,
+        #     side=OrderSide.SELL,
+        #     time_in_force=TimeInForce.DAY
+        # )
+        # trading_client.submit_order(limit_sl_sell)
+        # print(f"🛑 Stop Loss order placed at ${sl}")
         return True
     except Exception as e:
         print(f"❌ Failed to execute trade for {ticker}: {e}")
