@@ -82,7 +82,7 @@ def place_bracket_order(ticker, entry_price):
             qty=filled_qty,
             limit_price=tp,
             side=OrderSide.SELL,
-            time_in_force=TimeInForce.GTC
+            time_in_force=TimeInForce.DAY
         )
         trading_client.submit_order(limit_tp_sell)
         print(f"📈 Take Profit order placed at ${tp}")
@@ -92,19 +92,21 @@ def place_bracket_order(ticker, entry_price):
             qty=filled_qty,
             stop_price=sl,
             side=OrderSide.SELL,
-            time_in_force=TimeInForce.GTC
+            time_in_force=TimeInForce.DAY
         )
         trading_client.submit_order(limit_sl_sell)
         print(f"🛑 Stop Loss order placed at ${sl}")
+        return True
     except Exception as e:
         print(f"❌ Failed to execute trade for {ticker}: {e}")
+        return False
 
 def place_sell_order(ticker, qty):
     order = MarketOrderRequest(
         symbol=ticker,
         qty=qty,
         side=OrderSide.SELL,
-        time_in_force=TimeInForce.GTC
+        time_in_force=TimeInForce.DAY
     )
 
     try:
@@ -353,17 +355,17 @@ for ticker in tickers:
 
     # ✅ Check buy condition
     buy_signal, buy_info = check_buy_signal(df)
-    if buy_signal:
-        if ticker in held_tickers:
-          continue
-        buy_info['ticker'] = ticker
-        buy_info['status'] = 'open'
-        buy_signals.append((ticker, buy_info))
-        positions_df = pd.concat([positions_df, pd.DataFrame([buy_info])], ignore_index=True)
+    if buy_signal and ticker not in held_tickers:
         entry_price = buy_info["close"]
-        
-        place_bracket_order(ticker, entry_price=entry_price)
+        success = place_bracket_order(ticker, entry_price=entry_price)
 
+        if success:
+            buy_info['ticker'] = ticker
+            buy_info['status'] = 'open'
+            buy_signals.append((ticker, buy_info))
+            positions_df = pd.concat([positions_df, pd.DataFrame([buy_info])], ignore_index=True)
+            entry_price = buy_info["close"]
+            
 
 save_positions(positions_df)
 
