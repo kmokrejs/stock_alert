@@ -184,6 +184,8 @@ if __name__ == "__main__":
         #'SQ'
     ]
     watchlist = get_open_tickers()
+    already_in_positions = set(watchlist)
+
     results = []
     buy_opportunities = []
 
@@ -208,6 +210,9 @@ if __name__ == "__main__":
     STOP_LOSS_PCT = 0.20
 
     for ticker in tickers:
+        if ticker  in already_in_positions:
+            continue
+
         try:
             result = analyze_ticker(ticker)
             if result:

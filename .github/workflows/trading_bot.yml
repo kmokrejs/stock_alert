@@ -5,6 +5,9 @@ on:
     - cron: "31 13 * * 1-5" # 15:31 Prague (1 min after US market opens)
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   stock-alert:
     runs-on: ubuntu-latest
@@ -31,3 +34,12 @@ jobs:
           EMAIL_RECIPIENT: ${{ secrets.EMAIL_RECIPIENT }}
         run: |
           python bot.py
+
+      - name: Commit and push updated positions.csv
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main  # avoid conflicts
+          git add positions.csv
+          git commit -m "Update positions.csv from GitHub Action" || echo "No changes to commit"
+          git push origin main
