@@ -210,13 +210,16 @@ if __name__ == "__main__":
     STOP_LOSS_PCT = 0.20
 
     for ticker in tickers:
-        if ticker  in already_in_positions:
-            continue
-
         try:
             result = analyze_ticker(ticker)
-            if result:
-                results.append(result)
+
+            if not result:
+                continue
+            
+            results.append(result)
+
+            if ticker in already_in_positions:
+                continue 
 
             if result['Recommendation'].startswith("🔥") or result['Recommendation'].startswith("✅"):
                 trade_result = result.copy()
@@ -239,7 +242,6 @@ if __name__ == "__main__":
 
     with open(RSI_BUY_FILE, 'w') as f:
         json.dump(rsi_at_buy, f, indent=2)
-    
     watchlist_results = [r for r in results if r['Ticker'] in watchlist]
     if watchlist_results:
         watchlist_df = pd.DataFrame(watchlist_results)
