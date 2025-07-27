@@ -99,8 +99,8 @@ def log_trade_opportunity(data, filename="trade_log.csv"):
 def analyze_ticker(ticker):
     start_date = (pd.Timestamp.today() - pd.Timedelta(days=90)).strftime('%Y-%m-%d')
     end_date = pd.Timestamp.today().strftime('%Y-%m-%d')
-    
-    df = yf.download(ticker, start=start_date, end=end_date)[['Close']].copy()
+
+    df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True)[['Close']].copy()
     df.dropna(inplace=True)
     df.reset_index(inplace=True)
     df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]

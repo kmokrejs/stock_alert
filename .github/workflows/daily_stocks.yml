@@ -36,7 +36,7 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main  # avoid conflicts
+          git pull origin master  # avoid conflicts
           git add rsi_state.json rsi_buy_signals.json
           git commit -m "Update RSI state and buy signals from GitHub Action" || echo "No changes to commit"
-          git push origin main
+          git push origin master
