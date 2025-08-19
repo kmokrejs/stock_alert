@@ -385,7 +385,7 @@ for ticker, entry in positions.items():
       print(f"Reasons: {', '.join(sell_info['reasons'])}")
 
       # 🛑 Place a real sell order
-      place_sell_order(ticker, qty=1)
+      #place_sell_order(ticker, qty=1)
 
       # ✅ Compute gain/loss
       sell_price = sell_info['close']
