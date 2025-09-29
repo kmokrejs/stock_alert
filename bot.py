@@ -330,7 +330,8 @@ sync_positions_with_alpaca()
 
 buy_signals = []
 positions_df = load_positions()
-held_tickers = set(positions_df[positions_df['status'] == 'open']['ticker'].unique())
+open_positions_df = positions_df[positions_df['status'].fillna('open') == 'open']
+held_tickers = set(open_positions_df['ticker'].unique())
 
 watchlist = []
 positions = {
@@ -341,10 +342,10 @@ positions = {
         'srsi': row['srsi'],
         'ma20': row['ma20']
     }
-    for _, row in positions_df.iterrows()
+    for _, row in open_positions_df.iterrows()
 }
 
-for ticker in tickers:
+for ticker, entry in positions.items():
     df = fetch_data(ticker, start_date, end_date)
     if df is None:
         continue
