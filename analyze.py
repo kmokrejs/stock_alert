@@ -1,175 +1,222 @@
-import yfinance as yf
-import pandas as pd
-from email_sender import send_email
-from dotenv import load_dotenv
-import numpy as np
-from datetime import datetime
 import os
-import json
+from datetime import date, datetime
+import pandas as pd
+import ta
+import yfinance as yf
 
-RSI_STATE_FILE = "rsi_state.json"
-RSI_BUY_FILE = "rsi_buy_signals.json"
-
-load_dotenv()
-
-
-def compute_rsi(series, window=14):
-    delta = series.diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-
-    avg_gain = gain.ewm(alpha=1/window, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/window, adjust=False).mean()
-
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
-
-def compute_srsi(rsi, window=14):
-    min_rsi = rsi.rolling(window).min()
-    max_rsi = rsi.rolling(window).max()
-    range_rsi = max_rsi - min_rsi
-    srsi = (rsi - min_rsi) / range_rsi.replace(0, pd.NA)
-    return srsi * 100
-
-def analyze_entry(rsi, srsi, price_vs_ma20, price_vs_ma50, pe_ratio, html_format=False):
-    notes = []
-    base_signal = "Hold"
-
-    if rsi < 30 and srsi < 30 and price_vs_ma20 < 0:
-        base_signal = "🔥 Strong Buy"
-    elif rsi < 35 and srsi < 40 and price_vs_ma20 < 0:
-        base_signal = "✅ Buy"
-    elif rsi > 70 or srsi > 80:
-        base_signal = "⚠️ Overbought — Consider Selling"
-    elif 35 <= rsi <= 50:
-        base_signal = "🤔 Watch (Neutral)"
-
-    if price_vs_ma20 < -5 or price_vs_ma50 < -5:
-        notes.append("📉 Price below MA — possible undervaluation")
-    if price_vs_ma20 > 5 or price_vs_ma50 > 5:
-        notes.append("📈 Price above MA — watch for overbought")
-
-    if pe_ratio and pe_ratio < 15:
-        notes.append("💰 Low P/E — undervalued?")
-    elif pe_ratio and pe_ratio > 30:
-        notes.append("🧨 High P/E — priced for perfection")
-
-    # Combine
-    if notes:
-        separator = "<br>" if html_format else "\n"
-        return f"{base_signal}{separator}" + separator.join(notes)
-    else:
-        return base_signal
-    
-def analyze_exit(rsi, price_vs_ma20, price_vs_ma50, previous_rsi=None):
-    if previous_rsi is not None and (rsi - previous_rsi) > 42:
-        return "🔻 Sell — RSI Jump > 42"
-    if rsi > 70:
-        return "🔻 Sell — RSI Overbought"
-    if price_vs_ma20 > 12:
-        return "🔻 Sell — Price above MA20"
-    if price_vs_ma50 > 10:
-        return "🔻 Sell — Price above MA50"
-    return None
-    
-def log_trade_opportunity(data, filename="trade_log.csv"):
-    log_cols = [
-        'Date', 'Ticker', 'Price', 'RSI', 'SRSI',
-        'MA20', 'MA50',
-        'Price_vs_MA20(%)', 'Price_vs_MA50(%)',
-        'PE_Ratio', 'Recommendation', 'Target1', 'Target2', 'StopLoss'
-    ]
-
-    entry = {
-        **data,
-        'Target1': round(data['MA20'], 2),
-        'Target2': round(data['MA50'], 2),
-        'StopLoss': round(data['Price'] * 0.975, 2)
-    }
-
-    df = pd.DataFrame([entry], columns=log_cols)
-
-    if os.path.exists(filename):
-        df.to_csv(filename, mode='a', index=False, header=False)
-    else:
-        df.to_csv(filename, mode='w', index=False, header=True)
+from email_sender import send_email
 
 
+def fetch_data(ticker: str, start_date: str, end_date: str) -> pd.DataFrame | None:
+    """Fetch historical stock data using yfinance"""
+    try:
+        df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True, progress=False)
+        if df.empty:
+            return None
 
-def analyze_ticker(ticker):
-    start_date = (pd.Timestamp.today() - pd.Timedelta(days=90)).strftime('%Y-%m-%d')
-    end_date = pd.Timestamp.today().strftime('%Y-%m-%d')
+        df = df[['High', 'Low', 'Close']].copy()
+        df.reset_index(inplace=True)
+        df.columns = ['Date', 'High', 'Low', 'Close']
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
+        return df
+    except Exception as e:
+        print(f"❌ Failed to fetch data for {ticker}: {e}")
+        return None
 
-    df = yf.download(ticker, start=start_date, end=end_date, auto_adjust=True)[['Close']].copy()
-    df.dropna(inplace=True)
-    df.reset_index(inplace=True)
-    df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
-    df['Date'] = pd.to_datetime(df['Date'])
-
-    df['RSI'] = compute_rsi(df['Close'])
-    df['SRSI'] = compute_srsi(df['RSI'])
-    df['MA20'] = df['Close'].rolling(window=20).mean()
-    df['MA50'] = df['Close'].rolling(window=50).mean()
-    df.dropna(subset=['RSI', 'SRSI', 'MA20', 'MA50'], inplace=True)
+def check_near_buy_signal(df: pd.DataFrame, rsi_threshold=35, srsi_threshold=30):
+    df = df.dropna()
+    if df.empty:
+        return False, {}
 
     latest = df.iloc[-1]
+    close = float(latest['Close'])
+    rsi = float(latest['RSI'])
+    srsi = float(latest['SRSI'])
+    ma20 = float(latest['MA20'])
+    atr = float(latest['ATR'])
+    atr_pct = (atr / close) * 100 if close else None
 
+    # "Near buy" (not as strict as BUY)
+    if rsi < rsi_threshold and srsi < srsi_threshold and close < ma20:
+        return True, {
+            'date': latest.name,
+            'close': close,
+            'rsi': rsi,
+            'srsi': srsi,
+            'ma20': ma20,
+            'atr': atr,
+            'atr_pct': atr_pct,
+        }
+    return False, {}
+
+
+def compute_indicators(df: pd.DataFrame) -> pd.DataFrame | None:
+    if df is None or df.empty:
+        return None
     try:
-        info = yf.Ticker(ticker).info
-        pe_ratio = info.get('trailingPE', None)
-    except Exception:
-        pe_ratio = None
+        df = df.copy()
+        df['RSI'] = ta.momentum.RSIIndicator(df['Close'], window=14).rsi()
 
-    try:
-        current_price = yf.Ticker(ticker).fast_info['last_price']
-    except Exception:
-        current_price = latest['Close']  
+        df['SRSI'] = ta.momentum.StochRSIIndicator(df['Close']).stochrsi_k() * 100
 
-    recommendation = analyze_entry(
-        latest['RSI'],
-        latest['SRSI'],
-        (current_price - latest['MA20']) / latest['MA20'] * 100,
-        (current_price - latest['MA50']) / latest['MA50'] * 100,
-        pe_ratio,
-        html_format=True
-    )
+        df['MA20'] = ta.trend.SMAIndicator(df['Close'], window=20).sma_indicator()
 
-    previous_rsi = active_positions.get(ticker, None)
+        df['ATR'] = ta.volatility.AverageTrueRange(
+            high=df['High'],
+            low=df['Low'],
+            close=df['Close'],
+            window=14
+        ).average_true_range()
 
-    exit_signal = analyze_exit(
-        latest['RSI'],
-        (current_price - latest['MA20']) / latest['MA20'] * 100,
-        (current_price - latest['MA50']) / latest['MA50'] * 100,
-        previous_rsi
-    )
-
-    return {
-        'Ticker': ticker,
-        'Date': datetime.now().strftime("%Y-%m-%d %H:%M"),
-        'Price': current_price,
-        'RSI': latest['RSI'],
-        'SRSI': latest['SRSI'],
-        'MA20': latest['MA20'],
-        'MA50': latest['MA50'],
-        'Price_vs_MA20(%)': (current_price - latest['MA20']) / latest['MA20'] * 100,
-        'Price_vs_MA50(%)': (current_price - latest['MA50']) / latest['MA50'] * 100,
-        'PE_Ratio': pe_ratio,
-        'Recommendation': recommendation,
-        'Sell_Signal': exit_signal
-
-    }
-
-def get_open_tickers(filename="positions.csv"):
-    if not os.path.exists(filename):
-        return []
-
-    df = pd.read_csv(filename)
-    open_tickers = df[df["status"] == "open"]["ticker"].unique().tolist()
-    return open_tickers
+        return df
+    except Exception as e:
+        print(f"❌ Failed to compute indicators: {e}")
+        return None
 
 
+def check_buy_signal(df: pd.DataFrame):
+    df = df.dropna()
+    if df.empty:
+        return False, {}
 
-# === Run analysis on desired tickers ===
+    latest = df.iloc[-1]
+    close = float(latest['Close'])
+    rsi = float(latest['RSI'])
+    srsi = float(latest['SRSI'])
+    ma20 = float(latest['MA20'])
+    atr = float(latest['ATR'])
+    atr_pct = (atr / close) * 100 if close else None
+
+    if rsi < 30 and srsi < 30 and close < ma20:
+        return True, {
+            'date': latest.name,
+            'close': close,
+            'entry_rsi': rsi,
+            'srsi': srsi,
+            'ma20': ma20,
+            'atr': atr,
+            'atr_pct': atr_pct,
+        }
+    return False, {}
+
+def get_spy_trend_status(end_date: str):
+    """
+    Returns (is_bullish, spy_close, spy_ma200).
+    Bullish if SPY Close > MA200.
+    """
+    # Need enough history for MA200
+    start_date = (pd.Timestamp(end_date) - pd.Timedelta(days=400)).strftime('%Y-%m-%d')
+
+    spy_df = fetch_data("SPY", start_date, end_date)
+    if spy_df is None or spy_df.empty:
+        return None, None, None
+
+    spy_df = spy_df.copy()
+    spy_df['MA200'] = spy_df['Close'].rolling(200).mean()
+    spy_df = spy_df.dropna()
+
+    if spy_df.empty:
+        return None, None, None
+
+    latest = spy_df.iloc[-1]
+    spy_close = float(latest['Close'])
+    spy_ma200 = float(latest['MA200'])
+    return spy_close > spy_ma200, spy_close, spy_ma200
+
+
+def send_signals_email(buy_signals: list[tuple[str, dict]], near_buy_signals: list[tuple[str, dict]], spy_status):
+    if not buy_signals and not near_buy_signals:
+        print("📭 No signals to email.")
+        return
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    subject = f"📈 Stock Signals — {timestamp}"
+
+    is_bullish, spy_close, spy_ma200 = spy_status
+    if is_bullish is None:
+        spy_line = "SPY trend: (could not fetch)"
+    else:
+        icon = "✅" if is_bullish else "⚠️"
+        regime = "Bullish" if is_bullish else "Bearish"
+        spy_line = f"{icon} SPY trend: <b>{regime}</b> (Close: {spy_close:.2f} vs MA200: {spy_ma200:.2f})"
+
+    def to_df(signals, signal_type: str):
+        rows = []
+        for ticker, info in signals:
+            price = info['close']
+            ma20 = info['ma20']
+            rows.append({
+                "Ticker": ticker,
+                "Price": round(price, 2),
+                "RSI": round(info.get("entry_rsi", info.get("rsi")), 2),
+                "SRSI": round(info["srsi"], 2),
+                "MA20": round(ma20, 2),
+                "ATR(14)": round(info["atr"], 2),
+                "ATR%": round(info["atr_pct"], 2),
+                "Price vs MA20 (%)": round((price - ma20) / ma20 * 100, 2),
+                "Signal": signal_type,
+            })
+        return pd.DataFrame(rows)
+
+    sections = []
+
+    if buy_signals:
+        buy_df = to_df(buy_signals, "🔥 Strong Buy")
+        buy_html = buy_df.to_html(index=False, justify="center", border=1, escape=False)
+        sections.append(f"<h3>💸 Trade Opportunities</h3>{buy_html}")
+    else:
+        sections.append("<h3>💸 Trade Opportunities</h3><p>No buy signals today.</p>")
+
+    if near_buy_signals:
+        near_df = to_df(near_buy_signals, "👀 Close to Buy")
+        near_html = near_df.to_html(index=False, justify="center", border=1, escape=False)
+        sections.append(f"<h3>👀 Close to Buy (RSI < 35 & SRSI < 30)</h3>{near_html}")
+    else:
+        sections.append("<h3>👀 Close to Buy (RSI < 35 & SRSI < 30)</h3><p>No near-buy candidates today.</p>")
+
+    html_body = f"""
+    <html>
+    <head>
+        <style>
+            table {{
+                border-collapse: collapse;
+                width: 100%;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: center;
+            }}
+            th {{
+                background-color: #f2f2f2;
+            }}
+            h2, h3 {{
+                font-family: Arial, sans-serif;
+            }}
+            p {{
+                font-family: Arial, sans-serif;
+            }}
+        </style>
+    </head>
+    <body>
+        <h2>📈 Daily Stock Signals — {timestamp}</h2>
+        <p>{spy_line}</p>
+        {"<br>".join(sections)}
+    </body>
+    </html>
+    """
+    print(html_body)
+    # send_email(
+    #     subject=subject,
+    #     body=html_body,
+    #     recipient_email=os.environ["EMAIL_RECIPIENT"],
+    #     is_html=True
+    # )
+
+    print("✅ Signal email sent.")
+
+
 
 if __name__ == "__main__":
     tickers = [
@@ -181,128 +228,32 @@ if __name__ == "__main__":
         'TGT', 'WMT', 'ULTA', 'MCD',
         'NOC', 'RTX', 'LMT', 'FCX',
         'IWM', 'XLV', 'XLE', 'ARKK',
-        #'SQ'
     ]
-    watchlist = get_open_tickers()
-    already_in_positions = set(watchlist)
 
-    results = []
-    buy_opportunities = []
+    start_date = "2025-01-01"
+    end_date = date.today().isoformat()
 
-    if os.path.exists(RSI_STATE_FILE):
-        with open(RSI_STATE_FILE, 'r') as f:
-            active_positions = json.load(f)
-    else:
-        active_positions = {}
+    buy_signals: list[tuple[str, dict]] = []
+    near_buy_signals: list[tuple[str, dict]] = []
 
-    if os.path.exists(RSI_BUY_FILE):
-        with open(RSI_BUY_FILE, 'r') as f:
-            rsi_at_buy = json.load(f)
-    else:
-        rsi_at_buy = {}
-    
-    active_positions = {k: float(v) for k, v in active_positions.items()}
-    rsi_at_buy = {k: float(v) for k, v in rsi_at_buy.items()}
-
-
-
-    TAKE_PROFIT_PCT = 0.20
-    STOP_LOSS_PCT = 0.20
-
+    print("\n🔍 Analyzing tickers for signals...")
     for ticker in tickers:
-        try:
-            result = analyze_ticker(ticker)
+        df = fetch_data(ticker, start_date, end_date)
+        if df is None:
+            continue
 
-            if not result:
-                continue
-            
-            results.append(result)
+        df = compute_indicators(df)
+        if df is None:
+            continue
 
-            if ticker in already_in_positions:
-                continue 
+        buy_signal, buy_info = check_buy_signal(df)
+        if buy_signal:
+            buy_signals.append((ticker, buy_info))
+            continue  
 
-            if result['Recommendation'].startswith("🔥") or result['Recommendation'].startswith("✅"):
-                trade_result = result.copy()
-                trade_result['Target1'] = round(result['Price'] * (1 + TAKE_PROFIT_PCT), 2)
-                trade_result['StopLoss'] = round(result['Price'] * (1 - STOP_LOSS_PCT), 2)
+        near_signal, near_info = check_near_buy_signal(df, rsi_threshold=35, srsi_threshold=30)
+        if near_signal:
+            near_buy_signals.append((ticker, near_info))
 
-
-                buy_opportunities.append(trade_result) 
-                log_trade_opportunity(trade_result)    
-                active_positions[ticker] = result['RSI']
-                if ticker not in rsi_at_buy:
-                    rsi_at_buy[ticker] = result['RSI']
-
-
-        except Exception as e:
-            print(f"❌ Error analyzing {ticker}: {e}")
-
-    with open(RSI_STATE_FILE, 'w') as f:
-        json.dump(active_positions, f, indent=2)
-
-    with open(RSI_BUY_FILE, 'w') as f:
-        json.dump(rsi_at_buy, f, indent=2)
-    watchlist_results = [r for r in results if r['Ticker'] in watchlist]
-    if watchlist_results:
-        watchlist_df = pd.DataFrame(watchlist_results)
-        watchlist_df['RSI_at_Buy'] = watchlist_df['Ticker'].apply(lambda x: rsi_at_buy.get(x, np.nan))
-        watchlist_df['RSI_Jump'] = watchlist_df['RSI'] - watchlist_df['RSI_at_Buy']
-        watchlist_df['RSI_Jump'] = watchlist_df['RSI_Jump'].round(2)
-        watchlist_html = watchlist_df[['Ticker', 'Price', 'RSI', 'RSI_at_Buy', 'RSI_Jump', 'SRSI', 'PE_Ratio', 'Recommendation', 'Sell_Signal']].to_html(index=False, justify='center', border=1, escape=False)
-        watchlist_section = f"<h3>🔍 Watchlist</h3>{watchlist_html}"
-    else:
-        watchlist_section = "<p>No watchlist data available.</p>"
-
-    if results:
-        df = pd.DataFrame(results)
-
-        summary = "\n".join([
-            f"{r['Ticker']}: {r['Recommendation']} | RSI: {r['RSI']:.2f}, SRSI: {r['SRSI']:.2f}"
-            for r in results
-        ])
-
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-        if buy_opportunities:
-            trades_df = pd.DataFrame(buy_opportunities)
-            trades_html = trades_df[['Ticker', 'Price', 'RSI', 'SRSI', 'PE_Ratio', 'Recommendation', 'Target1', 'StopLoss']].to_html(index=False, justify='center', border=1, escape=False)
-            trades_section = f"<h3>💸 Trade Opportunities</h3>{trades_html}"
-        else:
-            trades_section = "<p>No trade opportunities today.</p>"
-
-
-        html_body = f"""
-        <html>
-        <head>
-            <style>
-                table {{
-                    border-collapse: collapse;
-                    width: 100%;
-                }}
-                th, td {{
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                    text-align: center;
-                }}
-                th {{
-                    background-color: #f2f2f2;
-                }}
-            </style>
-        </head>
-        <body>
-            <h2>📈 Daily Stock Analysis — {timestamp}</h2>
-            {watchlist_section}
-            <br>
-            {trades_section}
-        </body>
-        </html>
-        """
-        send_email(
-            subject = f"📊 Daily Stock Report — {timestamp}",
-            body=html_body,
-            recipient_email=os.environ["EMAIL_RECIPIENT"],
-            is_html=True
-        )
-        print("✅ Email sent.")
-    else:
-        print("❌ No analysis results to send.")
+    spy_status = get_spy_trend_status(end_date)
+    send_signals_email(buy_signals, near_buy_signals, spy_status)
