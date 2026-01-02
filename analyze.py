@@ -206,13 +206,12 @@ def send_signals_email(buy_signals: list[tuple[str, dict]], near_buy_signals: li
     </body>
     </html>
     """
-    print(html_body)
-    # send_email(
-    #     subject=subject,
-    #     body=html_body,
-    #     recipient_email=os.environ["EMAIL_RECIPIENT"],
-    #     is_html=True
-    # )
+    send_email(
+        subject=subject,
+        body=html_body,
+        recipient_email=os.environ["EMAIL_RECIPIENT"],
+        is_html=True
+    )
 
     print("✅ Signal email sent.")
 
